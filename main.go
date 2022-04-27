@@ -10,21 +10,29 @@ import (
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/awslabs/aws-lambda-go-api-proxy/httpadapter"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type chatLog struct {
-	messages [][2]string
+	messages []message
 	mutex    sync.Mutex
 }
 
-func (c *chatLog) addMessage(author, message string) {
+type message struct {
+	id     string
+	author string
+	body   string
+}
+
+func (c *chatLog) addMessage(author, body string) {
 	c.mutex.Lock()
-	msg := [2]string{author, message}
+	uuid := uuid.NewString()
+	msg := message{id: uuid, author: author, body: body}
 	c.messages = append(c.messages, msg)
 	c.mutex.Unlock()
 }
 
-func (c *chatLog) getMessages() [][2]string {
+func (c *chatLog) getMessages() []message {
 	c.mutex.Lock()
 	messages := c.messages
 	c.mutex.Unlock()
@@ -37,7 +45,7 @@ var msgLog chatLog
 func main() {
 	mux := chi.NewMux()
 	mux.Get("/", showHandler)
-	mux.Post("/truth", postHandler)
+	mux.Post("/", postHandler)
 
 	log.Println("🔥 Hot Chat")
 
@@ -53,22 +61,7 @@ func main() {
 func showHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 
-	msgLog.addMessage("Keith", "Hi, I'm Keith.")
-
-	messages := ""
-
-	for _, message := range msgLog.getMessages() {
-		element := `
-        <div>
-          <div class="author">%s</div>
-          <div class="message">%s</div>
-        </div>
-`
-		element = fmt.Sprintf(element, message[0], message[1])
-		messages += element
-	}
-
-	page := `
+	head := `
 		<head>
 		  <title>Hot Chat</title>
      	  <meta charset="UTF-8">
@@ -78,14 +71,81 @@ func showHandler(w http.ResponseWriter, r *http.Request) {
 
 		<style>
 		body {
-
+          background-color: #ff0000;
+          background-image: linear-gradient(315deg, #ff0000 0%, #ffed00 74%);
 		}
+		main {
+	      display: flex;
+	    }
+		main>div {
+		  border: solid 1px black;
+		  padding: 10px;
+	    }
+	    #chat-log{
+          flex:1;
+      	}
+        .author{
+          text-decoration: underline;
+        }
+        .author>span{
+          font-weight: bold;
+        }
+
 		</style>
+    `
+	page := `
 
 		<h1>Hot Chat</h1>
+	    <main>
+	    <div>
+	      <form action="/" method="post">
+	        <label for="author">
+              Your Name:
+	        </label>
+	        </br>
+	        <input required id="author" name="author" type="text"/>
+	        </br>
+	        </br>
+	        <label for="message">
+              Message:
+	        </label>
+	        </br>
+	        <textarea required id="message" name="message"></textarea>
+	        </br>
+	        </br>
+	        <button type="submit">Send</button>
+	      </form>
+	    </div>
+	    <div id="chat-log">
+	      <h2>Chat Log</h2>
+	      %s
+	    </div>
+    	</main>
+    	<script>
+          const $author = document.getElementById('author')
+          const author = localStorage.getItem('author');
+          $author.value = author;
+          $author.addEventListener('change', function(event){
+            localStorage.setItem('author', $author.value);
+          });
+    	</script>
 `
 
-	page += messages
+	messages := ""
+
+	for _, message := range msgLog.getMessages() {
+		element := `
+        <div id="%s">
+        <div class="author"><span>%s</span> wrote:</div>
+        <div class="message-body">"%s"</div>
+        <hr>
+        </div>
+`
+		element = fmt.Sprintf(element, message.id, message.author, message.body)
+		messages += element
+	}
+
+	page = head + fmt.Sprintf(page, messages)
 
 	_, err := w.Write([]byte(page))
 	if err != nil {
@@ -94,4 +154,12 @@ func showHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func postHandler(w http.ResponseWriter, r *http.Request) {
+	r.ParseForm()
+	log.Println(r.Form)
+	author := r.FormValue("author")
+	message := r.FormValue("message")
+
+	msgLog.addMessage(author, message)
+
+	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
