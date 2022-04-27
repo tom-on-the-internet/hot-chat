@@ -110,7 +110,7 @@ func showHandler(w http.ResponseWriter, r *http.Request) {
               Message:
 	        </label>
 	        </br>
-	        <textarea required id="message" name="message"></textarea>
+	        <input required id="message" name="message" type="text"/>
 	        </br>
 	        </br>
 	        <button type="submit">Send</button>
@@ -155,7 +155,7 @@ func showHandler(w http.ResponseWriter, r *http.Request) {
 
 func postHandler(w http.ResponseWriter, r *http.Request) {
 	r.ParseForm()
-	log.Println(r.Form)
+
 	author := r.FormValue("author")
 	message := r.FormValue("message")
 
